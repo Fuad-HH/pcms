@@ -25,7 +25,7 @@ using ScratchVecView =
 
 using PointsViewType = Kokkos::View<Coord*>;
 
-using MatViewType = Kokkos::View<int**>
+using MatViewType = Kokkos::View<int**>;
 struct Points {
   PointsViewType coordinates;
 };

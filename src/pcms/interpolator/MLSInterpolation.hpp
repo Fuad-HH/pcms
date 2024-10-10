@@ -19,7 +19,7 @@ Write<Real> mls_interpolation(const Reals source_values,
   // Kokkos::RangePolicy<Kokkos::DefaultExecutionSpace> range_policy(1,
   // nvertices_target);
 
-  static_assert(degree > 0," the degree of polynomial basis should be atleast 1");
+ // static_assert(degree > 0," the degree of polynomial basis should be atleast 1");
 
   Kokkos::View<size_t*> shmem_each_team(
       "stores the size required for each team", nvertices_target);
@@ -86,7 +86,7 @@ Write<Real> mls_interpolation(const Reals source_values,
           local_source_points(count, 0) = source_coordinates[index * dim];
           local_source_points(count, 1) = source_coordinates[index * dim + 1];
 	  if (dim == 3){
-	      local_source_points(count, 2) = 
+	      local_source_points(count, 2) = source_coordinates[index * dim + 2]; 
 	  }
         }
 
@@ -113,45 +113,45 @@ Write<Real> mls_interpolation(const Reals source_values,
         ScratchVecView Phi(team.team_scratch(0), nsupports);
 
 
-	Kokkos::deep_copy(lower, 0.0);
-	Kokkos::deep_copy(forward_matrix, 0.0);
-	Kokkos::deep_copy(moment_matrix, 0.0);
-	Kokkos::deep_copy(inv_matrix, 0.0);
-	Kokkos::deep_copy(V, 0.0);
-	Kokkos::deep_copy(Ptphi, 0.0);
-	Kokkos::deep_copy(resultant_matrix, 0.0);
-	Kokkos::deep_copy(targetMonomialVec, 0.0);
-	Kokkos::deep_copy(SupportValues, 0.0);
-	Kokkos::deep_copy(result, 0.0);
-	Kokkos::deep_copy(Phi, 0.0);
-        
-//	Kokkos::parallel_for(Kokkos::TeamThreadRange(team, 6), [=](int j) {
-//          for (int k = 0; k < 6; ++k) {
-//            lower(j, k) = 0;
-//            forward_matrix(j, k) = 0;
-//            moment_matrix(j, k) = 0;
-//            inv_mat(j, k) = 0;
-//          }
-//
-//          targetMonomialVec(j) = 0;
-//          for (int k = 0; k < nsupports; ++k) {
-//            resultant_matrix(j, k) = 0;
-//
-//            Ptphi(j, k) = 0;
-//          }
-//        });
-//
-//        Kokkos::parallel_for(Kokkos::TeamThreadRange(team, nsupports),
-//                             [=](int j) {
-//                               for (int k = 0; k < 6; ++k) {
-//                                 V(j, k) = 0;
-//                               }
-//
-//                               SupportValues(j) = 0;
-//                               result(j) = 0;
-//                               Phi(j) = 0;
-//                             });
-//
+//	Kokkos::deep_copy(lower, 0.0);
+//	Kokkos::deep_copy(forward_matrix, 0.0);
+//	Kokkos::deep_copy(moment_matrix, 0.0);
+//	Kokkos::deep_copy(inv_mat, 0.0);
+//	Kokkos::deep_copy(V, 0.0);
+//	Kokkos::deep_copy(Ptphi, 0.0);
+//	Kokkos::deep_copy(resultant_matrix, 0.0);
+//	Kokkos::deep_copy(targetMonomialVec, 0.0);
+//	Kokkos::deep_copy(SupportValues, 0.0);
+//	Kokkos::deep_copy(result, 0.0);
+//	Kokkos::deep_copy(Phi, 0.0);
+//        
+     Kokkos::parallel_for(Kokkos::TeamThreadRange(team, 6), [=](int j) {
+         for (int k = 0; k < 6; ++k) {
+           lower(j, k) = 0;
+           forward_matrix(j, k) = 0;
+           moment_matrix(j, k) = 0;
+           inv_mat(j, k) = 0;
+         }
+
+         targetMonomialVec(j) = 0;
+         for (int k = 0; k < nsupports; ++k) {
+           resultant_matrix(j, k) = 0;
+
+           Ptphi(j, k) = 0;
+         }
+       });
+
+       Kokkos::parallel_for(Kokkos::TeamThreadRange(team, nsupports),
+                            [=](int j) {
+                              for (int k = 0; k < 6; ++k) {
+                                V(j, k) = 0;
+                              }
+
+                              SupportValues(j) = 0;
+                              result(j) = 0;
+                              Phi(j) = 0;
+                            });
+
         Coord target_point;
 
         target_point.x = target_coordinates[i * dim];
@@ -161,11 +161,11 @@ Write<Real> mls_interpolation(const Reals source_values,
 	if (dim == 3){
 	    target_point.z = target_coordinates[i * dim + 2];
 	}
-        BasisPoly(targetMonomialVec, target_point);
+        BasisPoly(targetMonomialVec, slice_length, target_point);
 
         Kokkos::parallel_for(
             Kokkos::TeamThreadRange(team, nsupports),
-            [=](int j) { VandermondeMatrix(V, local_source_points, j); });
+            [=](int j) { VandermondeMatrix(V, local_source_points, j, slice_length); });
 
         team.team_barrier();
 
