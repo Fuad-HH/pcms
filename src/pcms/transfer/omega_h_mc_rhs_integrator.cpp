@@ -97,8 +97,12 @@ KOKKOS_INLINE_FUNCTION void FillElementSamples(
       for (int d = 0; d < Dim; ++d) {
         x[d] += bary[k] * vert_coords[k][d];
       }
+    }
+    // 2D: axisymmetric measure r dr dz, r = x[0] at the sample point
+    const Real radial = (Dim == 2) ? x[0] : 1.0;
+    for (int k = 0; k < nv; ++k) {
       node_gids(i * nv + k) = static_cast<PetscInt>(global_to_local(verts[k]));
-      coeffs(i * nv + k) = bary[k] * weight;
+      coeffs(i * nv + k) = bary[k] * weight * radial;
     }
     for (int d = 0; d < Dim; ++d) {
       coords(i, d) = x[d];

@@ -49,7 +49,11 @@ void FillP0MassCoo(
       for (int d = 0; d < Dim; ++d) {
         basis[d] = vm[d + 1] - vm[0];
       }
-      const Omega_h::Real measure = SimplexMeasure<Dim>(basis);
+      Omega_h::Real measure = SimplexMeasure<Dim>(basis);
+      if constexpr (Dim == 2) {
+        // axisymmetric (r,z): M_tt = int r dA = A * centroid radius
+        measure *= (vm[0][0] + vm[1][0] + vm[2][0]) / 3.0;
+      }
       const PetscInt g = static_cast<PetscInt>(global_to_local(e));
       coo_rows(e) = g;
       coo_cols(e) = g;
@@ -83,6 +87,34 @@ void FillP1MassCooPattern(
         }
       }
     });
+}
+
+// Exact axisymmetric P1 triangle mass matrix on an (r,z) mesh,
+// M_ij = int r psi_i psi_j dr dz = A/60 * (U + r_i + r_j) * (1 + delta_ij),
+// U = r_0 + r_1 + r_2, written in the element-major order of
+// FillP1MassCooPattern.
+Kokkos::View<MeshField::Real*> BuildAxisymmetricP1ElementMass(
+  int nelems, const Omega_h::Reals& coords, const Omega_h::LOs& elems2nodes)
+{
+  Kokkos::View<MeshField::Real*> elm_mass("elmMassMatrix", nelems * 9);
+  Kokkos::parallel_for(
+    "mass_p1_axisym", nelems, KOKKOS_LAMBDA(int e) {
+      const auto verts = Omega_h::gather_verts<3>(elems2nodes, e);
+      const Omega_h::Matrix<2, 3> vm =
+        Omega_h::gather_vectors<3, 2>(coords, verts);
+      Omega_h::Few<Omega_h::Vector<2>, 2> basis;
+      basis[0] = vm[1] - vm[0];
+      basis[1] = vm[2] - vm[0];
+      const Omega_h::Real area = SimplexMeasure<2>(basis);
+      const Omega_h::Real U = vm[0][0] + vm[1][0] + vm[2][0];
+      for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+          elm_mass(e * 9 + i * 3 + j) =
+            area / 60.0 * (U + vm[i][0] + vm[j][0]) * (i == j ? 2.0 : 1.0);
+        }
+      }
+    });
+  return elm_mass;
 }
 
 // Assembles the target-space mass matrix for spatial dimension Dim (triangles
@@ -127,21 +159,20 @@ Mat BuildOmegaHMassMatrixImpl(Omega_h::Mesh& mesh,
     return mat;
   }
 
-  // P1 target: consistent mass matrix assembled from MeshField per-element
-  // (Dim+1)x(Dim+1) blocks.
-  MeshField::OmegahMeshField<DefaultExecutionSpace, Dim,
-                             MeshField::KokkosController>
-    omf(mesh);
-  auto coordField = omf.getCoordField();
+  // P1 target: consistent mass matrix assembled from per-element
+  // (Dim+1)x(Dim+1) blocks (MeshField in 3D, exact axisymmetric in 2D).
   Kokkos::View<MeshField::Real*> elm_mass_dev;
   if constexpr (Dim == 3) {
+    MeshField::OmegahMeshField<DefaultExecutionSpace, Dim,
+                               MeshField::KokkosController>
+      omf(mesh);
+    auto coordField = omf.getCoordField();
     const auto [shp, map] = MeshField::Omegah::getTetrahedronElement<1>(mesh);
     MeshField::FieldElement coordFe(mesh.nelems(), coordField.field, shp, map);
     elm_mass_dev = buildElementMassMatrix(mesh, coordFe);
   } else {
-    const auto [shp, map] = MeshField::Omegah::getTriangleElement<1>(mesh);
-    MeshField::FieldElement coordFe(mesh.nelems(), coordField.field, shp, map);
-    elm_mass_dev = buildElementMassMatrix(mesh, coordFe);
+    elm_mass_dev = BuildAxisymmetricP1ElementMass(
+      nelems, mesh.coords(), mesh.ask_down(Dim, Omega_h::VERT).ab2b);
   }
 
   // Build COO sparsity pattern on device: each element contributes a

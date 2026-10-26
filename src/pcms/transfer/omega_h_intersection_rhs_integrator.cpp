@@ -49,9 +49,11 @@ Data BuildData(const std::shared_ptr<const OmegaHLagrangeLayout>& source_layout,
 
   // The integrand f_src * phi_target has polynomial degree source_order +
   // target_order on each intersection sub-simplex; integrate it exactly (with a
-  // 1-point floor so a P0->P0 pair still gets a valid rule).
+  // 1-point floor so a P0->P0 pair still gets a valid rule). In 2D the mesh is
+  // (r,z) with the axisymmetric measure r dr dz, which adds one degree.
   const int quad_order =
-    std::max(1, source_layout->GetOrder() + target_layout->GetOrder());
+    std::max(1, source_layout->GetOrder() + target_layout->GetOrder() +
+                  (dim == 2 ? 1 : 0));
 
   return detail::DispatchByOrder(target_layout->GetOrder(), [&](auto order_c) {
     constexpr int TgtOrder = decltype(order_c)::value;
@@ -153,6 +155,8 @@ Data BuildDataImpl(const OmegaHLagrangeLayout& source_layout,
 
             Omega_h::Real basis[ndof];
             Basis::Values(pt, tgt_omh, basis);
+            // 2D: axisymmetric measure r dr dz, r = pt[0] at the physical point
+            const Omega_h::Real radial = (Dim == 2) ? pt[0] : 1.0;
 
             const int global_ip = offset + ip_local;
             for (int d = 0; d < Dim; ++d) {
@@ -162,7 +166,7 @@ Data BuildDataImpl(const OmegaHLagrangeLayout& source_layout,
               node_gids(global_ip * ndof + k) = static_cast<PetscInt>(
                 Basis::Index(global_to_local, elm, tgt_verts, k));
               coeffs(global_ip * ndof + k) =
-                basis[k] * w * ref_factor * measure;
+                basis[k] * w * ref_factor * measure * radial;
             }
             ++ip_local;
           }
