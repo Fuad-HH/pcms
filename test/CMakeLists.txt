@@ -445,7 +445,8 @@ if(Catch2_FOUND)
       test_omega_h_mc_rhs_integrator.cpp
       test_mesh_intersection_field_transfer.cpp
       test_omega_h_3d_conservative_projection.cpp
-      test_omega_h_3d_analytic_mass.cpp)
+      test_omega_h_3d_analytic_mass.cpp
+      test_omega_h_axisymmetric_conservative_projection.cpp)
   endif()
   
   add_executable(unit_tests ${PCMS_UNIT_TEST_SOURCES})
